@@ -5,35 +5,29 @@ project(bitcask VERSION 0.1.0 LANGUAGES CXX DESCRIPTION "Bitcask implementation 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Modules
-# set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
-# find_package(AbseilCpp REQUIRED)
-
 # Set compiler flags
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wshadow -Wconversion -Wpedantic -Werror")
+# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wshadow -Wconversion -Wpedantic -Werror")
 
 # Set include directories
 include_directories(include)
 
-# Set source files
-file(GLOB SOURCES
-    src/*.cpp
-)
+# Add sources
+add_subdirectory(src)
 
-
-# Creating shared library "bitcask"
-# --- following beginning of https://stackoverflow.com/questions/17511496/how-to-create-a-shared-library-with-cmake
-add_library(bitcask SHARED ${SOURCES})
+# --- Creating shared library "bitcask" ---
+add_library(bitcask STATIC ${SOURCES})
 set_target_properties(bitcask PROPERTIES VERSION ${PROJECT_VERSION})
-set_target_properties(bitcask PROPERTIES PUBLIC_HEADER include/bitcask_handle.h)
+set_target_properties(bitcask PROPERTIES PUBLIC_HEADER include/bitcask_handle.hpp)
 target_include_directories(bitcask PRIVATE include)
-# --- end stack overflow ---
+# target_compile_options(bitcask PRIVATE -Wall -Wextra -Wshadow -Wconversion -Wpedantic -Werror)
+target_link_libraries(bitcask absl::status absl::statusor absl::strings)
 
-
-# Creating main executable "bitcask-cli"
+# --- Creating main executable "bitcask-cli" ---
 add_executable(bitcask-cli bitcask-cli.cpp ${SOURCES})
+# Link bitcask-cli with bitcask library and abseil-cpp
+target_link_libraries(bitcask-cli bitcask absl::status absl::statusor)
 # Add -fanalyzer flag only to the bitcask-cli target
-target_compile_options(bitcask-cli PRIVATE -fanalyzer)
+# target_compile_options(bitcask-cli PRIVATE -fanalyzer) # -> raises warnings from absl library
 
 
 # --- Google Test ---
@@ -62,6 +56,8 @@ enable_testing()
 # add test subdirectory
 add_subdirectory(tests)
 
+# --- AbseilCpp ---
+add_subdirectory(abseil-cpp)
 
 # --- Generate Docs ---
 option(BUILD_WITH_DOCS "Generate Docs" ON)

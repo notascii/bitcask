@@ -12,13 +12,15 @@ int main(int argc, const char *argv[])
         return EXIT_FAILURE;
     }
 
-    // Create a BitcaskHandle object
-    // bitcask::BitcaskHandle handle;
-
     // Print welcome message
     std::cout << "Welcome to \033[31;1mBitcask CLI\033[0m!" << '\n';
     std::cout << "Type 'help' for a list of commands." << '\n';
     std::cout << "Type 'quit' to exit." << '\n';
+
+    // Create a BitcaskHandle object
+    std::string db_path = argv[1];
+    bitcask::BitcaskHandle handle = bitcask::BitcaskHandle(db_path);
+
 
     // Main loop
     while (true)
@@ -33,13 +35,7 @@ int main(int argc, const char *argv[])
         }
         else if (input == "help")
         {
-            std::cout << "Available commands:" << '\n';
-            std::cout << "  get <key> - Retrieve the value for a key" << '\n';
-            std::cout << "  set <key> <value> - Store a key-value pair" << '\n';
-            std::cout << "  del <key> - Remove a key-value pair" << '\n';
-            std::cout << "  list - List all key-value pairs" << '\n';
-            std::cout << "  help - Display this help message" << '\n';
-            std::cout << "  quit - Exit the program" << '\n';
+            handle.help();
         }
         else
         {
@@ -54,23 +50,45 @@ int main(int argc, const char *argv[])
             if (command == "get")
             {
                 iss >> key;
-                std::cout << "key=" << key << '\n';
+                absl::StatusOr<std::string> result = handle.get(key);
+                if (result.ok())
+                {
+                    std::cout << "Value: " << result.value() << '\n';
+                }
+                else
+                {
+                    std::cerr << "Error: " << result.status().message() << std::endl;
+                }
             }
             else if (command == "set")
             {
                 iss >> key;
                 iss >> value;
-                std::cout << "key=" << key;
-                std::cout << ", value=" << value << '\n';
+                // std::cout << "key=" << key;
+                // std::cout << ", value=" << value << '\n';
+                absl::Status status = handle.set(key, value);
+                if (!status.ok())
+                {
+                    std::cerr << "Error: " << status.message() << std::endl;
+                }
             }
             else if (command == "del")
             {
                 iss >> key;
-                std::cout << "key=" << key << '\n';
+                // std::cout << "key=" << key << '\n';
+                absl::Status status = handle.del(key);
+                if (!status.ok())
+                {
+                    std::cerr << "Error: " << status.message() << std::endl;
+                }
             }
-            else if (command == "list")
+            else if (command == "list" || command == "l" || command == "keys" || command == "k")
             {
-                // List all key-value pairs
+                absl::Status status = handle.list();
+                if (!status.ok())
+                {
+                    std::cerr << "Error: " << status.message() << std::endl;
+                }
             }
             else
             {

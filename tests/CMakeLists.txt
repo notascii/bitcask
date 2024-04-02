@@ -1,13 +1,21 @@
-# add_executable(test_bitcask_handle test_bitcask_handle.cpp)
+function(add_test_file test_name)
+    add_executable(${test_name} ${test_name}.cpp)
+    target_link_libraries(${test_name} GTest::gtest_main bitcask)
+    gtest_discover_tests(${test_name})
+endfunction()
 
-# target_link_libraries(test_bitcask_handle GTest::gtest_main)
-
-add_executable(test_bitcask_handle test_bitcask_handle.cpp)
-target_link_libraries(test_bitcask_handle GTest::gtest_main bitcask)
-# add_test(NAME test_bitcask_handle COMMAND test_bitcask_handle)
-
-include(CTest)
 include(GoogleTest)
-gtest_discover_tests(test_bitcask_handle)
 
+file(GLOB TEST_FILES "test_*.cpp")
+
+foreach(TEST_FILE ${TEST_FILES})
+    get_filename_component(TEST_NAME ${TEST_FILE}.cpp NAME_WE)
+    add_test_file(${TEST_NAME})
+endforeach()
+
+# add_test_file(test_bitcask_handle)
+# add_test_file(test_keydir)
+
+
+# --- benchmark ---
 add_subdirectory(benchmark)
