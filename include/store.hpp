@@ -29,6 +29,42 @@ using fileid_t = uint32_t;
 namespace fs = std::filesystem;
 
 /**
+ * @struct DatafileEntry
+ * @brief Represents an entry in a datafile.
+ */
+struct DatafileEntry
+{
+    char CRC[4];                   /**< Cyclical Redundancy Check */
+    std::uint16_t ksz;             /**< key size */
+    std::uint16_t vsz;             /**< value size */
+    std::unique_ptr<char[]> key;   /**< key */
+    std::unique_ptr<char[]> value; /**< value */
+
+    DatafileEntry()
+    {
+        key = nullptr;
+        value = nullptr;
+    }
+    DatafileEntry(const uint16_t ksz, const uint16_t vsz) : ksz(ksz), vsz(vsz)
+    {
+        key = std::make_unique<char[]>(ksz);
+        value = std::make_unique<char[]>(vsz);
+    }
+    ~DatafileEntry() = default;
+
+    void set_ksz(const uint16_t ksz)
+    {
+        this->ksz = ksz;
+        this->key = std::make_unique<char[]>(ksz);
+    }
+    void set_vsz(const uint16_t vsz)
+    {
+        this->vsz = vsz;
+        this->value = std::make_unique<char[]>(vsz);
+    }
+};
+
+/**
  * @class Store
  * @brief Represents the store. The store manages the keydir and the datafiles.
  *        It provides methods to set, get, and delete key-value pairs, as well
@@ -43,6 +79,9 @@ class Store
     keydir::KeyDir keydir_;
     static const std::uint64_t TOMBSTONE;
     static const int TOMBSTONE_SIZE;
+    static const int CRC_SIZE;
+    static const int KSZ_SIZE;
+    static const int VSZ_SIZE;
 
   public:
     Store(const std::string &db_path);
@@ -60,6 +99,16 @@ class Store
      *         Or absl::InternalError if there was an error opening a datafile.
      */
     absl::Status load_keydir();
+
+    /**
+     * @brief Read an entry from a datafile and return the value.
+     *
+     * @param file The file stream to read from.
+     * @param vsz The size of the value.
+     * @return absl::StatusOr<std::string> The value read from the file or an
+     *        error if the value could not be read.
+     */
+    absl::StatusOr<std::string> read_value(std::ifstream &file, std::uint16_t vsz) const;
 
     inline uint32_t active_fileid() const
     {

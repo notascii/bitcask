@@ -23,7 +23,7 @@ BitcaskHandle::BitcaskHandle(const std::string &db_path) : db_path_(db_path), st
         if (store_.load_keydir().ok())
         {
             // Successfully loaded keydir in green
-            std::cout << "\033[32;1mSucessfully loaded keydir\033[0m" << std::endl;
+            std::cout << "\033[32;1mSucessfully loaded " << store_.kd_size() << " keys to keydir\033[0m" << std::endl;
         }
         else
         {

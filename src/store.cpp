@@ -13,6 +13,9 @@ namespace store
 
 const std::uint64_t Store::TOMBSTONE = 0xDEADDEADDEADDEAD;
 const int Store::TOMBSTONE_SIZE = 20;
+const int Store::CRC_SIZE = 4;
+const int Store::KSZ_SIZE = 2;
+const int Store::VSZ_SIZE = 2;
 
 Store::Store(const std::string &db_path) : db_path_(db_path), active_fileid_(1), active_file_offset_(0), keydir_()
 {
@@ -20,24 +23,38 @@ Store::Store(const std::string &db_path) : db_path_(db_path), active_fileid_(1),
 
 absl::Status Store::set(const std::string &key, const std::string &value)
 {
-    // open the active file for writing in append mode
-    std::ofstream file;
-    file.open(active_datafile_path(), std::ios::app);
-    // std::cout << "active_datafile_path: " << active_datafile_path() << std::endl;
-
+    // open the active file for writing in binary append mode
+    std::ofstream file(active_datafile_path(), std::ios::binary | std::ios::app);
     if (!file.is_open())
     {
-        return absl::InternalError("Error opening file");
+        return absl::InternalError("Failed to open file for writing");
     }
 
-    // write the key and value to the datafile
-    constexpr absl::string_view entry = "CRC,%d,%d,%s,%s\n";
-    std::string entry_str = absl::StrFormat(entry, key.size(), value.size(), key, value);
+    // check the key and value sizes
+    if (key.size() > std::numeric_limits<std::uint16_t>::max())
+    {
+        return absl::InvalidArgumentError("Key size is too large");
+    }
+    std::uint16_t ksz = static_cast<std::uint16_t>(key.size());
+    if (value.size() > std::numeric_limits<std::uint16_t>::max())
+    {
+        return absl::InvalidArgumentError("Value size is too large");
+    }
+    std::uint16_t vsz = static_cast<std::uint16_t>(value.size());
 
-    file.write(entry_str.c_str(), entry_str.size());
-    // cast the key to a char array and write it to the file
-    // std::vector<std::uint8_t> key_bytes(key.begin(), key.end());
-    // file.write(reinterpret_cast<const char*>(key_bytes.data()), key_bytes.size());
+    // create the datafile entry
+    store::DatafileEntry df_entry(ksz, vsz);
+    std::memcpy(df_entry.CRC, "0000", 4);
+
+    // copy the key and value to the df_entry
+    // /!\ valgrind writing 1 byte after ?
+    std::memcpy(df_entry.key.get(), key.c_str(), ksz);
+    std::memcpy(df_entry.value.get(), value.c_str(), vsz);
+
+    // write the df_entry to the file
+    file.write(reinterpret_cast<const char*>(&df_entry), sizeof(df_entry) - 2 * sizeof(std::unique_ptr<char[]>));
+    file.write(reinterpret_cast<const char*>(df_entry.key.get()), ksz);
+    file.write(reinterpret_cast<const char*>(df_entry.value.get()), vsz);
     if (file.fail())
     {
         return absl::InternalError("Writing to file failed");
@@ -51,11 +68,11 @@ absl::Status Store::set(const std::string &key, const std::string &value)
     }
 
     // update the keydir
-    keydir::Entry entry_info = {active_fileid_, static_cast<std::uint16_t>(value.size()), active_file_offset_};
-    absl::Status status = keydir_.set(key, entry_info);
+    keydir::Entry kd_entry = { .fileid = active_fileid_, .vsz = vsz, .vpos = active_file_offset_ };
+    absl::Status status = keydir_.set(key, kd_entry);
 
     // increment the offset as the write and keydir update were successful
-    active_file_offset_ += entry_str.size();
+    active_file_offset_ += sizeof(df_entry) - 2 * sizeof(std::unique_ptr<char[]>) + ksz + vsz;
 
     return status;
 }
@@ -63,13 +80,11 @@ absl::Status Store::set(const std::string &key, const std::string &value)
 absl::StatusOr<std::string> Store::get(const std::string &key) const
 {
     // get the entry from the keydir
-    absl::StatusOr<keydir::Entry> entry = keydir_.get(key);
-    if (!entry.ok())
+    absl::StatusOr<keydir::Entry> kd_entry = keydir_.get(key);
+    if (!kd_entry.ok())
     {
-        return entry.status();
+        return kd_entry.status();
     }
-
-    // std::cout << "entry: " << entry->fileid << " " << entry->vsz << " " << entry->vpos << std::endl;
 
     // open the file for reading
     std::ifstream file;
@@ -80,24 +95,13 @@ absl::StatusOr<std::string> Store::get(const std::string &key) const
         return absl::InternalError("Error opening file");
     }
 
-    // seek to the position of the value in the file
-    file.seekg(entry->vpos); // TODO: doesnt work, it jumps "vpos" bytes from the beginning of the file
-                             // but was intended to jump "vpos" lines from the beginning of the file.
+    // seek to the position of the entry in the datafile
+    file.seekg(kd_entry->vpos);
 
-    // read the current line of the file
-    std::string line = "";
-    std::getline(file, line);
-
-    std::size_t pos = line.find_last_of(',');
-    if (pos == std::string::npos)
+    absl::StatusOr<std::string> value = read_value(file, kd_entry->vsz);
+    if (!value.ok())
     {
-        return absl::InternalError("Error reading from file");
-    }
-
-    std::string value = line.substr(pos + 1);
-    if (value.size() != entry->vsz)
-    {
-        return absl::InternalError("Error reading from file");
+        return value.status();
     }
 
     if (file.fail())
@@ -117,23 +121,20 @@ absl::StatusOr<std::string> Store::get(const std::string &key) const
 
 absl::Status Store::del(const std::string &key)
 {
-    // open the file for writing in append mode
+    // open the file for writing in binary append mode
     std::ofstream file;
-    file.open(active_datafile_path(), std::ios::app);
+    file.open(active_datafile_path(), std::ios::binary | std::ios::app);
 
     if (!file.is_open())
     {
         return absl::InternalError("Error opening file");
     }
 
-    // write the key and TOMSTONE to the datafile
-    constexpr absl::string_view entry = "CRC,%d,%d,%s,%lu\n";
-    std::string entry_str = absl::StrFormat(entry, key.size(), TOMBSTONE_SIZE, key, TOMBSTONE);
-
-    file.write(entry_str.c_str(), entry_str.size());
-    if (file.fail())
+    // write the entry to the file
+    absl::Status status = set(key, std::to_string(Store::TOMBSTONE));
+    if (!status.ok())
     {
-        return absl::InternalError("Writing to file failed");
+        return status;
     }
 
     // close the file
@@ -144,10 +145,14 @@ absl::Status Store::del(const std::string &key)
     }
 
     // remove the key from the keydir
-    absl::Status status = keydir_.del(key);
+    status = keydir_.del(key);
+    if (!status.ok())
+    {
+        return status;
+    }
 
     // increment the offset as the write and keydir update were successful
-    active_file_offset_ += entry_str.size();
+    active_file_offset_ += Store::CRC_SIZE + Store::KSZ_SIZE + Store::VSZ_SIZE + key.size() + Store::TOMBSTONE_SIZE;
 
     return status;
 }
@@ -180,36 +185,79 @@ absl::Status Store::load_keydir()
         return absl::InternalError("Error opening file");
     }
 
-    // read the file line by line
-    std::string line;
-    while (std::getline(file, line))
+    // get the file size
+    file.seekg(0, std::ios::end);
+    std::size_t file_size = file.tellg();
+    file.seekg(0, std::ios::beg);
+
+    // read the entries from the file
+    DatafileEntry cur_df_entry;
+    while (active_file_offset_ < file_size)
     {
-        // split the comma separated line
-        std::vector<std::string> parts = absl::StrSplit(line, ',');
-        std::string key = parts[3], value = parts[4];
+        // read the entry from the file
+        file.read(reinterpret_cast<char*>(&cur_df_entry), sizeof(cur_df_entry) - 2 * sizeof(std::unique_ptr<char[]>));
+        cur_df_entry.key = std::make_unique<char[]>(cur_df_entry.ksz);
+        cur_df_entry.value = std::make_unique<char[]>(cur_df_entry.vsz);
+        file.read(reinterpret_cast<char*>(cur_df_entry.key.get()), cur_df_entry.ksz);
+        file.read(reinterpret_cast<char*>(cur_df_entry.value.get()), cur_df_entry.vsz);
+        if (file.fail())
+        {
+            return absl::InternalError("Error reading from file");
+        }
+
+        std::string key_str = std::string(cur_df_entry.key.get(), cur_df_entry.ksz);
+        std::string value_str = std::string(cur_df_entry.value.get(), cur_df_entry.vsz);
 
         // don't add keys with tombstone values to the keydir
-        if (value == std::to_string(TOMBSTONE))
+        if (value_str == std::to_string(TOMBSTONE))
         {
             // remove the key from the keydir in case it was added before
-            absl::Status status = keydir_.del(key);
+            absl::Status status = keydir_.del(key_str);
             // increment the offset
-            active_file_offset_ += line.size() + 1; // +1 for the newline character
+            active_file_offset_ += Store::CRC_SIZE + Store::KSZ_SIZE + Store::VSZ_SIZE + cur_df_entry.ksz + cur_df_entry.vsz;
             continue;
         }
 
         // update the keydir
-        keydir::Entry entry_info = {active_fileid_, static_cast<std::uint16_t>(value.size()), active_file_offset_};
-        absl::Status status = keydir_.set(key, entry_info);
+        keydir::Entry entry_info = {active_fileid_, static_cast<std::uint16_t>(cur_df_entry.vsz), active_file_offset_};
+        absl::Status status = keydir_.set(key_str, entry_info);
 
         // increment the offset
-        active_file_offset_ += line.size() + 1; // +1 for the newline character
+        active_file_offset_ += Store::CRC_SIZE + Store::KSZ_SIZE + Store::VSZ_SIZE + cur_df_entry.ksz + cur_df_entry.vsz;
     }
 
     // close the file
     file.close();
 
     return absl::OkStatus();
+}
+
+absl::StatusOr<std::string> Store::read_value(std::ifstream &file, std::uint16_t vsz) const
+{
+    // seek to the position of the key size in the file
+    file.seekg(Store::CRC_SIZE, std::ios::cur);
+    if (file.fail())
+    {
+        return absl::InternalError("Failed to seek to value position");
+    }
+
+    // read the key size to get the position of the value
+    std::uint16_t ksz;
+    file.read(reinterpret_cast<char*>(&ksz), sizeof(ksz));
+
+    // seek to the position of the value in the file
+    file.seekg(Store::VSZ_SIZE + ksz, std::ios::cur);
+
+    // read the value
+    std::string value_str;
+    value_str.resize(vsz);
+    file.read(reinterpret_cast<char*>(&value_str[0]), vsz);
+    if (file.fail())
+    {
+        return absl::InternalError("Failed to read value from file");
+    }
+
+    return value_str;
 }
 
 // absl::StatusOr<std::ofstream> Store::create_writer(fileid_t fileid)

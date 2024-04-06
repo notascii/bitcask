@@ -29,7 +29,7 @@ int main(int argc, const char *argv[])
         std::cout << "\033[1m> \033[0m"; // Prompt
         std::getline(std::cin, input);
 
-        if (input == "quit")
+        if (input == "quit" || input == "q")
         {
             break;
         }
@@ -47,7 +47,7 @@ int main(int argc, const char *argv[])
             std::istringstream iss(input);
             iss >> command;
 
-            if (command == "get")
+            if (command == "get" || command == "g")
             {
                 iss >> key;
                 absl::StatusOr<std::string> result = handle.get(key);
@@ -60,7 +60,7 @@ int main(int argc, const char *argv[])
                     std::cerr << "Error: " << result.status().message() << std::endl;
                 }
             }
-            else if (command == "set")
+            else if (command == "set" || command == "s")
             {
                 iss >> key;
                 iss >> value;
@@ -72,7 +72,7 @@ int main(int argc, const char *argv[])
                     std::cerr << "Error: " << status.message() << std::endl;
                 }
             }
-            else if (command == "del")
+            else if (command == "del" || command == "d")
             {
                 iss >> key;
                 // std::cout << "key=" << key << '\n';
