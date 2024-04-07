@@ -58,9 +58,9 @@ void BitcaskHandle::help() const
     std::cout << "  \033[1mget\033[0m <key>\t\tRetrieve the value for a key" << '\n';
     std::cout << "  \033[1mset\033[0m <key> <value>\tStore a key-value pair" << '\n';
     std::cout << "  \033[1mdel\033[0m <key>\t\tRemove a key-value pair" << '\n';
-    std::cout << "  \033[1mlist\033[0m\tList all key-value pairs (or 'l' or 'keys' or 'k')" << '\n';
-    std::cout << "  \033[1mhelp\033[0m\tDisplay this help message" << '\n';
-    std::cout << "  \033[1mquit\033[0m\tExit the program" << '\n';
+    std::cout << "  \033[1mlist\033[0m\t\t\tList all key-value pairs" << '\n';
+    std::cout << "  \033[1mhelp\033[0m\t\t\tDisplay this help message" << '\n';
+    std::cout << "  \033[1mquit\033[0m\t\t\tExit the program" << '\n';
 }
 
 } // namespace bitcask

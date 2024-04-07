@@ -13,9 +13,9 @@ int main(int argc, const char *argv[])
     }
 
     // Print welcome message
-    std::cout << "Welcome to \033[31;1mBitcask CLI\033[0m!" << '\n';
-    std::cout << "Type 'help' for a list of commands." << '\n';
-    std::cout << "Type 'quit' to exit." << '\n';
+    // std::cout << "Welcome to \033[31;1mBitcask CLI\033[0m!" << '\n';
+    // std::cout << "Type 'help' for a list of commands." << '\n';
+    // std::cout << "Type 'quit' to exit." << '\n';
 
     // Create a BitcaskHandle object
     std::string db_path = argv[1];
@@ -26,26 +26,29 @@ int main(int argc, const char *argv[])
     while (true)
     {
         std::string input;
-        std::cout << "\033[1m> \033[0m"; // Prompt
+        std::cout << db_path << "\033[1m> \033[0m"; // Prompt
         std::getline(std::cin, input);
 
-        if (input == "quit" || input == "q")
+        std::istringstream iss(input);
+
+        // lowercase the input the command: first word of the input
+        std::string command;
+        iss >> command;
+        std::transform(command.begin(), command.end(), command.begin(), ::tolower);
+
+        if (command == "quit" || command == "q")
         {
             break;
         }
-        else if (input == "help")
+        else if (command == "help")
         {
             handle.help();
         }
         else
         {
             // Parse the input
-            std::string command;
             std::string key;
             std::string value;
-
-            std::istringstream iss(input);
-            iss >> command;
 
             if (command == "get" || command == "g")
             {
