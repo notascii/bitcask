@@ -73,6 +73,10 @@ class KeyDir
     {
         return keydir_.end();
     }
+    inline auto find(const std::string &key) const
+    {
+        return keydir_.find(key);
+    }
 };
 
 } // namespace keydir

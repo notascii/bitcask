@@ -112,7 +112,7 @@ TEST_F(KeyDir, SetAndGetMultiple)
     EXPECT_EQ(actual_entry.vsz, expected_entry.vsz);
     EXPECT_EQ(actual_entry.vpos, expected_entry.vpos);
 
-    expected_entry = {.fileid = 1, .vsz = 1, .vpos = 12};
+    expected_entry = {.fileid = 1, .vsz = 1, .vpos = 10};
     actual_entry = store.kd_get("b").value();
     EXPECT_EQ(actual_entry.fileid, expected_entry.fileid);
     EXPECT_EQ(actual_entry.vsz, expected_entry.vsz);
@@ -141,7 +141,7 @@ TEST_F(KeyDir, Update)
     ASSERT_TRUE(status.ok());
     EXPECT_EQ(store.kd_size(), 1);
 
-    expected_entry = {.fileid = 1, .vsz = 3, .vpos = 12};
+    expected_entry = {.fileid = 1, .vsz = 3, .vpos = 10};
     actual_entry = store.kd_get("a").value();
     EXPECT_EQ(typeid(actual_entry), typeid(keydir::Entry));
     EXPECT_EQ(actual_entry, expected_entry);
@@ -162,7 +162,7 @@ TEST_F(KeyDir, Delete)
 
     status = store.set("b", "2");
     ASSERT_TRUE(status.ok());
-    expected_entry = {.fileid = 1, .vsz = 1, .vpos = 12};
+    expected_entry = {.fileid = 1, .vsz = 1, .vpos = 10};
     actual_entry = store.kd_get("b").value();
     EXPECT_EQ(actual_entry, expected_entry);
 

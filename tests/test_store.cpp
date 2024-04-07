@@ -33,6 +33,18 @@ protected:
 };
 
 
+// Function to convert binary data to hex string
+std::string binaryToHexString(const char* data, size_t size) {
+    std::string hexString;
+    for (size_t i = 0; i < size; ++i) {
+        char buf[3];
+        sprintf(buf, "%02X", static_cast<unsigned char>(data[i]));
+        hexString += buf;
+    }
+    return hexString;
+}
+
+
 TEST(StoreConstructor, Default)
 {
     store::Store store("/we/dont/need/a/path/for/this/test");
@@ -53,7 +65,7 @@ TEST_F(Store, Set)
 
     EXPECT_EQ(store.kd_size(), 1);
     EXPECT_EQ(store.active_fileid(), 1);
-    EXPECT_EQ(store.active_file_offset(), 12); // 12 = size of "CRC,1,1,a,1\n"
+    EXPECT_EQ(store.active_file_offset(), 10); // 10 = size of 0000-01-01-a-1
 }
 
 
@@ -69,7 +81,7 @@ TEST_F(Store, SetMultiple)
 
     EXPECT_EQ(store.kd_size(), 2);
     EXPECT_EQ(store.active_fileid(), 1);
-    EXPECT_EQ(store.active_file_offset(), 24); // 24 = size of "CRC,1,1,a,1\nCRC,1,1,b,2\n"
+    EXPECT_EQ(store.active_file_offset(), 20); // 20 = size of 0000-01-01-a-1-0000-01-01-b-2
 }
 
 
@@ -97,7 +109,7 @@ TEST_F(Store, LoadKeydir)
     ASSERT_TRUE(status.ok());
     status = store.set("b", "test");
     ASSERT_TRUE(status.ok());
-    EXPECT_EQ(store.active_file_offset(), 27); // 27 = size of "CRC,1,1,a,1\nCRC,4,4,b,test\n"
+    EXPECT_EQ(store.active_file_offset(), 23); // 23 = size of 0000-01-01-a-1-0000-01-01-b-test
 
     // (2) Creating a new store and load the keydir as an existing datafile
     //     is present in the directory
@@ -106,7 +118,7 @@ TEST_F(Store, LoadKeydir)
     ASSERT_TRUE(status.ok());
     EXPECT_EQ(store2.kd_size(), 2);
     EXPECT_EQ(store2.active_fileid(), 1);
-    EXPECT_EQ(store2.active_file_offset(), 27); // 27 = size of "CRC,1,1,a,1\nCRC,4,4,b,test\n"
+    EXPECT_EQ(store2.active_file_offset(), 23); // 23 = size of 0000-01-01-a-1-0000-01-01-b-test
 }
 
 
@@ -133,13 +145,12 @@ TEST_F(Store, Del)
 
     auto TOMBSTONE = 0xDEADDEADDEADDEAD;
 
-    std::string line;
-    std::getline(file, line);
-    EXPECT_EQ(line, "CRC,1,1,a,1");
-    std::getline(file, line);
-    EXPECT_EQ(line, "CRC,1,1,b,2");
-    std::getline(file, line);
-    EXPECT_EQ(line, "CRC,1,20,a," + std::to_string(TOMBSTONE));
+    // get file content in one string
+    std::string content((std::istreambuf_iterator<char>(file)),
+                        std::istreambuf_iterator<char>());
+    file.close();
+    EXPECT_EQ(binaryToHexString(content.c_str(), content.size()),
+              "30303030010001006131303030300100010062323030303001001400613136303435373235383835373337353930343435");
 }
 
 
@@ -149,13 +160,25 @@ TEST_F(Store, LoadKeydirWithTombstone)
     absl::Status status;
 
     // (1) Populate the keydir and datafile
-    status = store.set("a", "1"); // size = 12
+    status = store.set("a", "1"); // size = 10
     ASSERT_TRUE(status.ok());
-    status = store.set("b", "2"); // size = 12
+    std::cout << store.active_file_offset() << std::endl;
+
+    status = store.set("b", "2"); // size = 10
     ASSERT_TRUE(status.ok());
-    status = store.del("a"); // size = 32 = size of "CRC,1,20,a,16045725885737590445\n"
+    std::cout << store.active_file_offset() << std::endl;
+
+    status = store.del("a"); // size = 29 = size of 0000-01-20-a-16045725885737590445
     ASSERT_TRUE(status.ok());
-    EXPECT_EQ(store.active_file_offset(), 56); // 56 = 12 + 12 + 32
+    std::cout << store.active_file_offset() << std::endl;
+
+    // std::ifstream file;
+    // file.open(store.active_datafile_path(), std::ios::in);
+    // std::string content((std::istreambuf_iterator<char>(file)),
+    //                     std::istreambuf_iterator<char>());
+    // file.close();
+    // std::cout << content << std::endl;
+    EXPECT_EQ(store.active_file_offset(), 49); // 49 = 10 + 10 + 29
 
     // (2) Creating a new store and load the keydir as an existing datafile
     //     is present in the directory
@@ -164,5 +187,5 @@ TEST_F(Store, LoadKeydirWithTombstone)
     ASSERT_TRUE(status.ok());
     EXPECT_EQ(store2.kd_size(), 1);
     EXPECT_EQ(store2.active_fileid(), 1);
-    EXPECT_EQ(store.active_file_offset(), 56); // 56 = 12 + 12 + 32
+    EXPECT_EQ(store.active_file_offset(), 49); // 49 = 10 + 10 + 29
 }

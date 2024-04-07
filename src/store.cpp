@@ -130,6 +130,12 @@ absl::Status Store::del(const std::string &key)
         return absl::InternalError("Error opening file");
     }
 
+    // check if the key exists in the keydir
+    if (keydir_.find(key) == keydir_.end())
+    {
+        return absl::NotFoundError("Key not found");
+    }
+
     // write the entry to the file
     absl::Status status = set(key, std::to_string(Store::TOMBSTONE));
     if (!status.ok())
@@ -150,9 +156,6 @@ absl::Status Store::del(const std::string &key)
     {
         return status;
     }
-
-    // increment the offset as the write and keydir update were successful
-    active_file_offset_ += Store::CRC_SIZE + Store::KSZ_SIZE + Store::VSZ_SIZE + key.size() + Store::TOMBSTONE_SIZE;
 
     return status;
 }
