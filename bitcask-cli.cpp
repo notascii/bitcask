@@ -21,7 +21,6 @@ int main(int argc, const char *argv[])
     std::string db_path = argv[1];
     bitcask::BitcaskHandle handle = bitcask::BitcaskHandle(db_path);
 
-
     // Main loop
     while (true)
     {
@@ -56,7 +55,7 @@ int main(int argc, const char *argv[])
                 absl::StatusOr<std::string> result = handle.get(key);
                 if (result.ok())
                 {
-                    std::cout << "Value: " << result.value() << '\n';
+                    std::cout << result.value() << '\n';
                 }
                 else
                 {
@@ -73,6 +72,10 @@ int main(int argc, const char *argv[])
                 if (!status.ok())
                 {
                     std::cerr << "Error: " << status.message() << std::endl;
+                }
+                else
+                {
+                    std::cout << "OK" << '\n';
                 }
             }
             else if (command == "del" || command == "d")
